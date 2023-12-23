@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dijkstra Pathfinding</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    canvas {
+      border: 1px solid #000;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="pathfindingCanvas" width="600" height="400"></canvas>
+  <script>
+    const canvas = document.getElementById('pathfindingCanvas');
+    const ctx = canvas.getContext('2d');
+    const gridSize = 20;
+    const rows = canvas.height / gridSize;
+    const cols = canvas.width / gridSize;
+
+    // Represent the grid as a 2D array
+    const grid = new Array(rows).fill(0).map(() => new Array(cols).fill(0));
+
+    // Define start and multiple end points with random positions
+    let start = getRandomPosition();
+    let endPoints = generateRandomEndPoints(5); // Adjust the number of end points as needed
+
+    // Customizable colors
+    const backgroundColor = '#eee';
+    const wallColor = '#222';
+    const startColor = 'green';
+    const endColor = 'red';
+    const pathColor = 'blue';
+
+    // Initialize the grid
+    function initializeGrid() {
+      for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+          grid[i][j] = {
+            row: i,
+            col: j,
+            cost: Infinity,
+            visited: false,
+            wall: false,
+            neighbors: [],
+            previous: undefined,
+          };
+        }
+      }
+    }
+
+    // Draw the grid on the canvas
+    function drawGrid() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+          const cell = grid[i][j];
+          ctx.beginPath();
+          ctx.rect(j * gridSize, i * gridSize, gridSize, gridSize);
+          ctx.fillStyle = cell.wall ? wallColor : backgroundColor;
+          if (cell.cost !== Infinity) {
+            ctx.fillStyle = `rgba(0, 255, 0, ${1 - cell.cost / 50})`;
+          }
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw the start and end points
+    function drawPoints() {
+      ctx.beginPath();
+      ctx.arc(start.col * gridSize + gridSize / 2, start.row * gridSize + gridSize / 2, gridSize / 3, 0, 2 * Math.PI);
+      ctx.fillStyle = startColor;
+      ctx.fill();
+
+      endPoints.forEach((endPoint, index) => {
+        ctx.beginPath();
+        ctx.arc(endPoint.col * gridSize + gridSize / 2, endPoint.row * gridSize + gridSize / 2, gridSize / 3, 0, 2 * Math.PI);
+        ctx.fillStyle = endColor;
+        ctx.fill();
+        ctx.fillText((index + 1).toString(), endPoint.col * gridSize + gridSize / 2, endPoint.row * gridSize + gridSize / 2);
+      });
+    }
+
+    // Get neighbors for a given cell
+    function getNeighbors(cell) {
+      const neighbors = [];
+      const { row, col } = cell;
+
+      if (row > 0) neighbors.push(grid[row - 1][col]);
+      if (row < rows - 1) neighbors.push(grid[row + 1][col]);
+      if (col > 0) neighbors.push(grid[row][col - 1]);
+      if (col < cols - 1) neighbors.push(grid[row][col + 1]);
+
+      return neighbors.filter(neighbor => !neighbor.wall);
+    }
+
+    // Dijkstra's algorithm
+    function dijkstra() {
+      const unvisited = [...grid.flat()];
+
+      grid[start.row][start.col].cost = 0;
+
+      while (unvisited.length > 0) {
+        unvisited.sort((a, b) => a.cost - b.cost);
+        const current = unvisited.shift();
+
+        if (endPoints.every(endPoint => current === grid[endPoint.row][endPoint.col]) || current.cost === Infinity) {
+          // Reached all end points or no path exists
+          reconstructPath();
+          return;
+        }
+
+        current.visited = true;
+
+        const neighbors = getNeighbors(current);
+        neighbors.forEach(neighbor => {
+          const tentativeCost = current.cost + 1;
+          if (tentativeCost < neighbor.cost) {
+            neighbor.cost = tentativeCost;
+            neighbor.previous = current;
+          }
+        });
+      }
+    }
+
+    // Reconstruct the path and draw it on the canvas
+    function reconstructPath() {
+      endPoints.forEach((endPoint, index) => {
+        let current = grid[endPoint.row][endPoint.col];
+        const path = [current];
+
+        while (current.previous) {
+          path.push(current.previous);
+          current = current.previous;
+        }
+
+        // Draw the path
+        ctx.beginPath();
+        ctx.moveTo(path[0].col * gridSize + gridSize / 2, path[0].row * gridSize + gridSize / 2);
+        for (let i = 1; i < path.length; i++) {
+          ctx.lineTo(path[i].col * gridSize + gridSize / 2, path[i].row * gridSize + gridSize / 2);
+        }
+        ctx.strokeStyle = pathColor;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      });
+    }
+
+    // Handle mouse events to draw walls
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseup', handleMouseUp);
+
+    let isDrawing = false;
+
+    function handleMouseDown(event) {
+      isDrawing = true;
+      updateCell(event);
+    }
+
+    function handleMouseMove(event) {
+      if (isDrawing) {
+        updateCell(event);
+      }
+    }
+
+    function handleMouseUp() {
+      isDrawing = false;
+    }
+
+    function updateCell(event) {
+      const mouseX = event.clientX - canvas.getBoundingClientRect().left;
+      const mouseY = event.clientY - canvas.getBoundingClientRect().top;
+
+      const col = Math.floor(mouseX / gridSize);
+      const row = Math.floor(mouseY / gridSize);
+
+      if (grid[row] && grid[row][col]) {
+        grid[row][col].wall = !grid[row][col].wall;
+        drawGrid();
+        drawPoints();
+        if (start.row !== endPoints[0].row || start.col !== endPoints[0].col) {
+          dijkstra();
+        }
+      }
+    }
+
+    // Generate a random position within the grid
+    function getRandomPosition() {
+      return {
+        row: Math.floor(Math.random() * rows),
+        col: Math.floor(Math.random() * cols),
+      };
+    }
+
+    // Generate an array of random end points
+    function generateRandomEndPoints(count) {
+        const endPoints = [];
+  for (let i = 0; i < count; i++) {
+    endPoints.push(getRandomPosition());
+  }
+  return endPoints;
+}
+
+// Initialize the grid, draw the points, and perform Dijkstra's algorithm
+function initialize() {
+  initializeGrid();
+  drawGrid();
+  drawPoints();
+  dijkstra();
+}
+
+// Call the initialize function
+initialize();
+      </script>
+</body>
+</html>
